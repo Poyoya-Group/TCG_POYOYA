@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POYOYA TCG</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="stylesheet" href="css/theme.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/cards.css" />
+  <link rel="stylesheet" href="css/pages.css" />
+</head>
+<body>
+
+  <!-- ÉCRAN DE VÉRIFICATION DISCORD -->
+  <div id="auth-screen" class="auth-overlay">
+    <div class="auth-box">
+      <div class="gamberge-spinner"></div>
+      <h1 id="auth-title">Attend je gamberge...</h1>
+      <p id="auth-subtitle">Leeloo Dallas Multipass !</p>
+      <div id="auth-actions" class="auth-actions hidden">
+        <button id="btn-discord-login" class="btn-primary">
+          <i class="fa-brands fa-discord"></i> Se connecter avec Discord
+        </button>
+        <button id="btn-dev-login" class="btn-secondary">
+          <i class="fa-solid fa-code"></i> Mode Dev (Admin)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPLICATION PRINCIPALE -->
+  <div id="app" class="app-container hidden">
+    <!-- NAVBAR -->
+    <header class="navbar">
+      <div class="nav-left">
+        <div class="brand" id="tcg-brand-name">POYOYA TCG</div>
+        <nav class="nav-links">
+          <button class="nav-tab active" data-tab="boosters">
+            <i class="fa-solid fa-box-open"></i> Boosters
+          </button>
+          <button class="nav-tab" data-tab="catalogue">
+            <i class="fa-solid fa-book-open"></i> Catalogue
+          </button>
+          <button class="nav-tab" data-tab="echanges">
+            <i class="fa-solid fa-arrow-right-arrow-left"></i> Échanges
+          </button>
+          <button class="nav-tab" data-tab="duels">
+            <i class="fa-solid fa-shield-halved"></i> Duels
+          </button>
+          <button class="nav-tab" data-tab="encheres"><i class="fa-solid fa-gavel"></i> Enchères</button>
+          <button class="nav-tab" data-tab="classement">
+            <i class="fa-solid fa-trophy"></i> Classement
+          </button>
+        </nav>
+
+        <div id="admin-nav-group" class="nav-admin hidden">
+          <span class="nav-divider"></span>
+          <button class="nav-tab" data-tab="editeur">
+            <i class="fa-solid fa-pen-to-square"></i> Éditeur de cartes
+          </button>
+          <button class="nav-tab" data-tab="parametres">
+            <i class="fa-solid fa-gear"></i> Paramètres
+          </button>
+        </div>
+      </div>
+
+      <div class="nav-right">
+        <div class="currency-pill" title="Tes PoyoCoins">
+          <i class="fa-solid fa-coins"></i>
+          <span id="user-balance">0</span>
+          <span id="currency-symbol">P</span>
+        </div>
+
+        <div class="user-profile-pill" id="user-profile-btn">
+          <img id="user-avatar" src="" alt="Avatar" />
+          <span id="user-name">Joueur</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- CONTENU DYNAMIQUE DES ONGLETS -->
+    <main id="main-content" class="main-content"></main>
+  </div>
+
+  <!-- CONTENEUR DE MODALES & NOTIFICATIONS TOAST -->
+  <div id="modal-container" class="modal-backdrop hidden"></div>
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- FIREBASE SDK (Compat v10 pour usage direct sans bundler) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+  <!-- SCRIPTS DU TCG -->
+  <script type="module" src="js/auth.js"></script>
+</body>
+</html>
