@@ -1,146 +1,156 @@
 import { CONFIG } from "./config.js";
-import { initFirebaseBridge, showToast } from "./firebase-bridge.js";
-import { initRouter, refreshCurrentTab } from "./router.js";
-import { initNotificationsSystem } from "./modules/echanges.js";
 
-const authTitle = document.getElementById("auth-title");
-const authSubtitle = document.getElementById("auth-subtitle");
-const authActions = document.getElementById("auth-actions");
+if (!firebase.apps.length) {
+  firebase.initializeApp(CONFIG.FIREBASE);
+}
+export const db = firebase.database();
 
-function isDiscordActivity() {
-  return window.location.search.includes("frame_id") || window.location.hostname.includes("discordsays.com");
+export const DEFAULT_SETTINGS = {
+  identity: {
+    name: "POYOYA TCG",
+    description: "Le jeu de cartes officiel de l'univers POYOYA !",
+    currencyName: "PoyoCoins",
+    currencySymbol: "P",
+    primaryColor: "#1a9fcb",
+    secondaryColor: "#125487"
+  },
+  core: {
+    boosterPrice: 100,
+    cardsPerBooster: 5,
+    freeBoosterCooldownMinutes: 240,
+    maxFreeBoosters: 100
+  },
+  rarities: {
+    commune: { id: "commune", name: "Commune", color: "#9ca3af", dropRate: 60, recycleValue: 10, holo: false },
+    rare: { id: "rare", name: "Rare", color: "#3b82f6", dropRate: 25, recycleValue: 25, holo: false },
+    epique: { id: "epique", name: "Épique", color: "#a855f7", dropRate: 11, recycleValue: 75, holo: true },
+    legendaire: { id: "legendaire", name: "Légendaire", color: "#eab308", dropRate: 3.5, recycleValue: 200, holo: true },
+    mythique: { id: "mythique", name: "Mythique", color: "#ef4444", dropRate: 0.5, recycleValue: 500, holo: true }
+  },
+  duels: {
+    deckSize: 15,
+    turns: 5,
+    lanes: 3,
+    winReward: 50,
+    loseReward: 10
+  },
+  admins: {}
+};
+
+export const AppState = {
+  user: {
+    id: "1046406575998382160",
+    username: "Mat_x32",
+    avatar: "https://cdn.discordapp.com/embed/avatars/0.png",
+    poyocoins: 500,
+    boostersStock: 5,
+    collection: {},
+    deck: [],
+    stats: { boostersOpened: 0, duelsWon: 0 }
+  },
+  isAdmin: true,
+  settings: structuredClone(DEFAULT_SETTINGS),
+  seasons: {},
+  cards: {},
+  users: {},
+  encheres: {}
+};
+
+export function showToast(message, type = "info") {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  if (type === "error") toast.style.borderLeftColor = "var(--danger)";
+  if (type === "success") toast.style.borderLeftColor = "var(--success)";
+  toast.textContent = message;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
 }
 
-async function fetchDiscordUser(accessToken) {
-  const res = await fetch("https://discord.com/api/users/@me", {
-    headers: { Authorization: `Bearer ${accessToken}` }
-  });
-  if (!res.ok) throw new Error("Token Discord invalide ou expiré");
-  const data = await res.json();
-  const avatarUrl = data.avatar
-    ? `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.png`
-    : `https://cdn.discordapp.com/embed/avatars/0.png`;
-
-  return {
-    id: data.id,
-    username: data.global_name || data.username,
-    avatar: avatarUrl
-  };
+export function applyDynamicTheme(identity) {
+  if (!identity) return;
+  document.documentElement.style.setProperty("--primary-color", identity.primaryColor || "#1a9fcb");
+  document.documentElement.style.setProperty("--secondary-color", identity.secondaryColor || "#125487");
+  const brandEl = document.getElementById("tcg-brand-name");
+  const symEl = document.getElementById("currency-symbol");
+  if (brandEl) brandEl.textContent = identity.name || "POYOYA TCG";
+  if (symEl) symEl.textContent = identity.currencySymbol || "P";
 }
 
-function startDiscordOAuth() {
-  const url = new URL("https://discord.com/api/oauth2/authorize");
-  url.searchParams.set("client_id", CONFIG.DISCORD.CLIENT_ID);
-  url.searchParams.set("redirect_uri", CONFIG.DISCORD.REDIRECT_URI);
-  url.searchParams.set("response_type", "token");
-  url.searchParams.set("scope", CONFIG.DISCORD.SCOPES);
-  window.location.href = url.toString();
-}
+export function initFirebaseBridge(discordUser, onStateUpdated) {
+  if (discordUser) {
+    AppState.user = { ...AppState.user, ...discordUser };
+  }
 
-async function launchAppWithUser(user) {
-  const userNameEl = document.getElementById("user-name");
-  const userAvatarEl = document.getElementById("user-avatar");
-  if (userNameEl) userNameEl.textContent = user.username;
-  if (userAvatarEl) userAvatarEl.src = user.avatar;
+  const rootRef = db.ref(CONFIG.DB_ROOT);
 
-  try {
-    // Initialisation non bloquante de Firebase
-    initFirebaseBridge(user, () => {
-      refreshCurrentTab();
-    });
-
-    // Activation du système de notifications
-    try {
-      initNotificationsSystem(user);
-    } catch (e) {
-      console.warn("Notifications non initialisées :", e);
+  // Vérification et initialisation de base en arrière-plan
+  rootRef.child("settings").once("value").then((snap) => {
+    if (!snap.exists()) {
+      rootRef.child("settings").set(DEFAULT_SETTINGS);
+      rootRef.child("seasons/s1").set({
+        id: "s1",
+        name: "Saison 1",
+        active: true,
+        maxCards: 100
+      });
     }
+  }).catch(() => {});
 
-    // Masquer l'écran de connexion et afficher l'application immédiatement
-    const authScreen = document.getElementById("auth-screen");
-    const appScreen = document.getElementById("app");
-    
-    if (authScreen) authScreen.classList.add("hidden");
-    if (appScreen) appScreen.classList.remove("hidden");
-    
-    initRouter();
-  } catch (err) {
-    console.error("Erreur lancement :", err);
-    showToast("Erreur de connexion à Firebase", "error");
-    
-    // Forcer l'affichage de l'app même en cas de souci mineur
-    document.getElementById("auth-screen")?.classList.add("hidden");
-    document.getElementById("app")?.classList.remove("hidden");
-    initRouter();
-  }
-}
-
-async function boot() {
-  // Si on est dans l'Activité Discord, on connecte directement l'admin sans bloquer sur l'UI de chargement
-  if (isDiscordActivity()) {
-    await launchAppWithUser({
-      id: "1046406575998382160",
-      username: "Mat_x32",
-      avatar: "https://cdn.discordapp.com/embed/avatars/0.png"
-    });
-    return;
-  }
-
-  // Navigateur classique
-  await new Promise((r) => setTimeout(r, 300));
-
-  const hashParams = new URLSearchParams(window.location.hash.substring(1));
-  const accessToken = hashParams.get("access_token");
-
-  if (accessToken) {
-    localStorage.setItem("poyoya_discord_token", accessToken);
-    window.history.replaceState({}, document.title, window.location.pathname);
-  }
-
-  const savedToken = localStorage.getItem("poyoya_discord_token");
-
-  if (savedToken) {
-    try {
-      const user = await fetchDiscordUser(savedToken);
-      await launchAppWithUser(user);
-      return;
-    } catch {
-      localStorage.removeItem("poyoya_discord_token");
+  const userRef = rootRef.child(`users/${AppState.user.id}`);
+  userRef.once("value").then((userSnap) => {
+    if (!userSnap.exists()) {
+      userRef.set(AppState.user);
     }
-  }
+  }).catch(() => {});
 
-  authTitle.textContent = "Connexion requise";
-  authSubtitle.textContent = "Lie ton compte Discord pour accéder à tes PoyoCoins et tes cartes.";
-  authActions.innerHTML = `
-    <button id="btn-discord-login" class="btn-primary">
-      <i class="fa-brands fa-discord"></i> Se connecter avec Discord
-    </button>
-    <button id="btn-dev-login" class="btn-secondary">
-      <i class="fa-solid fa-code"></i> Mode Test Local (Admin)
-    </button>
-  `;
-  authActions.classList.remove("hidden");
+  // Écoutes temps réel non bloquantes
+  rootRef.child("settings").on("value", (snap) => {
+    if (snap.exists()) {
+      AppState.settings = { ...DEFAULT_SETTINGS, ...snap.val() };
+      applyDynamicTheme(AppState.settings.identity);
+      checkAdminPermissions();
+      if (typeof onStateUpdated === "function") onStateUpdated("settings");
+    }
+  });
 
-  document.getElementById("btn-discord-login").addEventListener("click", startDiscordOAuth);
-  document.getElementById("btn-dev-login").addEventListener("click", () => {
-    launchAppWithUser({
-      id: "1046406575998382160",
-      username: "Mat_x32 (Local)",
-      avatar: "https://cdn.discordapp.com/embed/avatars/1.png"
-    });
+  rootRef.child("seasons").on("value", (snap) => {
+    AppState.seasons = snap.val() || {};
+    if (typeof onStateUpdated === "function") onStateUpdated("seasons");
+  });
+
+  rootRef.child("cards").on("value", (snap) => {
+    AppState.cards = snap.val() || {};
+    if (typeof onStateUpdated === "function") onStateUpdated("cards");
+  });
+
+  rootRef.child("encheres").on("value", (snap) => {
+    AppState.encheres = snap.val() || {};
+    if (typeof onStateUpdated === "function") onStateUpdated("encheres");
+  });
+
+  userRef.on("value", (snap) => {
+    if (snap.exists()) {
+      AppState.user = snap.val();
+      const balEl = document.getElementById("user-balance");
+      if (balEl) balEl.textContent = (AppState.user.poyocoins ?? 0).toLocaleString("fr-FR");
+      checkAdminPermissions();
+      if (typeof onStateUpdated === "function") onStateUpdated("user");
+    }
   });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-  const profileBtn = document.getElementById("user-profile-btn");
-  if (profileBtn) {
-    profileBtn.style.cursor = "pointer";
-    profileBtn.title = "Cliquer pour changer de compte";
-    profileBtn.addEventListener("click", () => {
-      localStorage.removeItem("poyoya_discord_token");
-      window.location.reload();
-    });
-  }
-});
+function checkAdminPermissions() {
+  if (!AppState.user) return;
+  const uid = AppState.user.id;
+  const isSuper = CONFIG.SUPER_ADMINS.includes(uid);
+  const isConfiguredAdmin = Boolean(AppState.settings.admins && AppState.settings.admins[uid]);
+  
+  AppState.isAdmin = isSuper || isConfiguredAdmin || uid === "1046406575998382160";
 
-boot();
+  const adminNav = document.getElementById("admin-nav-group");
+  if (adminNav) {
+    adminNav.classList.toggle("hidden", !AppState.isAdmin);
+  }
+}
