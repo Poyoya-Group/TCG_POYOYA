@@ -7,10 +7,8 @@ const authTitle = document.getElementById("auth-title");
 const authSubtitle = document.getElementById("auth-subtitle");
 const authActions = document.getElementById("auth-actions");
 
-// Détecte si le site est lancé en tant qu'Activité Discord
 function isDiscordActivity() {
-  const params = new URLSearchParams(window.location.search);
-  return params.has("frame_id") || window.location.hostname.includes("discordsays.com");
+  return window.location.search.includes("frame_id") || window.location.hostname.includes("discordsays.com");
 }
 
 async function fetchDiscordUser(accessToken) {
@@ -40,59 +38,56 @@ function startDiscordOAuth() {
 }
 
 async function launchAppWithUser(user) {
-  authTitle.textContent = "Chargement en cours...";
-  authSubtitle.textContent = `Synchronisation de ${user.username} avec POYOYA...`;
-  authActions.classList.add("hidden");
-
   const userNameEl = document.getElementById("user-name");
   const userAvatarEl = document.getElementById("user-avatar");
   if (userNameEl) userNameEl.textContent = user.username;
   if (userAvatarEl) userAvatarEl.src = user.avatar;
 
   try {
-    await initFirebaseBridge(user, () => {
+    // Initialisation non bloquante de Firebase
+    initFirebaseBridge(user, () => {
       refreshCurrentTab();
     });
 
-    initNotificationsSystem(user);
+    // Activation du système de notifications
+    try {
+      initNotificationsSystem(user);
+    } catch (e) {
+      console.warn("Notifications non initialisées :", e);
+    }
 
-    document.getElementById("auth-screen").classList.add("hidden");
-    document.getElementById("app").classList.remove("hidden");
+    // Masquer l'écran de connexion et afficher l'application immédiatement
+    const authScreen = document.getElementById("auth-screen");
+    const appScreen = document.getElementById("app");
+    
+    if (authScreen) authScreen.classList.add("hidden");
+    if (appScreen) appScreen.classList.remove("hidden");
+    
     initRouter();
   } catch (err) {
     console.error("Erreur lancement :", err);
-    authTitle.textContent = "Oups, petit souci de connexion";
-    authSubtitle.textContent = "Vérifie ta configuration Firebase dans js/config.js";
-    authActions.classList.remove("hidden");
     showToast("Erreur de connexion à Firebase", "error");
+    
+    // Forcer l'affichage de l'app même en cas de souci mineur
+    document.getElementById("auth-screen")?.classList.add("hidden");
+    document.getElementById("app")?.classList.remove("hidden");
+    initRouter();
   }
 }
 
 async function boot() {
-  // Si on est dans l'Activité Discord, on évite les boucles infinies de SDK et on propose l'accès direct
+  // Si on est dans l'Activité Discord, on connecte directement l'admin sans bloquer sur l'UI de chargement
   if (isDiscordActivity()) {
-    authTitle.textContent = "POYOYA TCG - Activité";
-    authSubtitle.textContent = "Lance l'application dans ton salon vocal :";
-    authActions.innerHTML = `
-      <button id="btn-activity-start" class="btn-primary">
-        <i class="fa-solid fa-play"></i> Entrer dans le jeu
-      </button>
-    `;
-    authActions.classList.remove("hidden");
-
-    document.getElementById("btn-activity-start").addEventListener("click", () => {
-      // Utilise ton vrai ID admin configuré dans config.js pour que tu aies les droits directs dans l'activité
-      launchAppWithUser({
-        id: "1046406575998382160",
-        username: "Mat_x32",
-        avatar: "https://cdn.discordapp.com/embed/avatars/0.png"
-      });
+    await launchAppWithUser({
+      id: "1046406575998382160",
+      username: "Mat_x32",
+      avatar: "https://cdn.discordapp.com/embed/avatars/0.png"
     });
     return;
   }
 
   // Navigateur classique
-  await new Promise((r) => setTimeout(r, 400));
+  await new Promise((r) => setTimeout(r, 300));
 
   const hashParams = new URLSearchParams(window.location.hash.substring(1));
   const accessToken = hashParams.get("access_token");
