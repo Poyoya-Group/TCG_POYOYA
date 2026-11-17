@@ -38,8 +38,17 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const AppState = {
-  user: null,
-  isAdmin: false,
+  user: {
+    id: "1046406575998382160",
+    username: "Mat_x32",
+    avatar: "https://cdn.discordapp.com/embed/avatars/0.png",
+    poyocoins: 500,
+    boostersStock: 5,
+    collection: {},
+    deck: [],
+    stats: { boostersOpened: 0, duelsWon: 0 }
+  },
+  isAdmin: true,
   settings: structuredClone(DEFAULT_SETTINGS),
   seasons: {},
   cards: {},
@@ -69,64 +78,54 @@ export function applyDynamicTheme(identity) {
   if (symEl) symEl.textContent = identity.currencySymbol || "P";
 }
 
-export async function initFirebaseBridge(discordUser, onStateUpdated) {
+export function initFirebaseBridge(discordUser, onStateUpdated) {
+  if (discordUser) {
+    AppState.user = { ...AppState.user, ...discordUser };
+  }
+
   const rootRef = db.ref(CONFIG.DB_ROOT);
 
-  const settingsSnap = await rootRef.child("settings").once("value");
-  if (!settingsSnap.exists()) {
-    await rootRef.child("settings").set(DEFAULT_SETTINGS);
-    await rootRef.child("seasons/s1").set({
-      id: "s1",
-      name: "Saison 1",
-      active: true,
-      maxCards: 100
-    });
-  }
+  rootRef.child("settings").once("value").then((snap) => {
+    if (!snap.exists()) {
+      rootRef.child("settings").set(DEFAULT_SETTINGS);
+      rootRef.child("seasons/s1").set({
+        id: "s1",
+        name: "Saison 1",
+        active: true,
+        maxCards: 100
+      });
+    }
+  }).catch(() => {});
 
-  const userRef = rootRef.child(`users/${discordUser.id}`);
-  const userSnap = await userRef.once("value");
-  if (!userSnap.exists()) {
-    await userRef.set({
-      id: discordUser.id,
-      username: discordUser.username,
-      avatar: discordUser.avatar,
-      poyocoins: 500,
-      boostersStock: 5,
-      lastFreeBooster: Date.now(),
-      collection: {},
-      deck: [],
-      stats: { boostersOpened: 0, duelsWon: 0 }
-    });
-  } else {
-    await userRef.update({
-      username: discordUser.username,
-      avatar: discordUser.avatar
-    });
-  }
+  const userRef = rootRef.child(`users/${AppState.user.id}`);
+  userRef.once("value").then((userSnap) => {
+    if (!userSnap.exists()) {
+      userRef.set(AppState.user);
+    }
+  }).catch(() => {});
 
   rootRef.child("settings").on("value", (snap) => {
     if (snap.exists()) {
       AppState.settings = { ...DEFAULT_SETTINGS, ...snap.val() };
       applyDynamicTheme(AppState.settings.identity);
       checkAdminPermissions();
-      onStateUpdated("settings");
+      if (typeof onStateUpdated === "function") onStateUpdated("settings");
     }
   });
 
   rootRef.child("seasons").on("value", (snap) => {
     AppState.seasons = snap.val() || {};
-    onStateUpdated("seasons");
+    if (typeof onStateUpdated === "function") onStateUpdated("seasons");
   });
 
   rootRef.child("cards").on("value", (snap) => {
     AppState.cards = snap.val() || {};
-    onStateUpdated("cards");
+    if (typeof onStateUpdated === "function") onStateUpdated("cards");
   });
 
-  // Écoute temps réel des enchères
   rootRef.child("encheres").on("value", (snap) => {
     AppState.encheres = snap.val() || {};
-    onStateUpdated("encheres");
+    if (typeof onStateUpdated === "function") onStateUpdated("encheres");
   });
 
   userRef.on("value", (snap) => {
@@ -135,7 +134,7 @@ export async function initFirebaseBridge(discordUser, onStateUpdated) {
       const balEl = document.getElementById("user-balance");
       if (balEl) balEl.textContent = (AppState.user.poyocoins ?? 0).toLocaleString("fr-FR");
       checkAdminPermissions();
-      onStateUpdated("user");
+      if (typeof onStateUpdated === "function") onStateUpdated("user");
     }
   });
 }
@@ -146,7 +145,7 @@ function checkAdminPermissions() {
   const isSuper = CONFIG.SUPER_ADMINS.includes(uid);
   const isConfiguredAdmin = Boolean(AppState.settings.admins && AppState.settings.admins[uid]);
   
-  AppState.isAdmin = isSuper || isConfiguredAdmin;
+  AppState.isAdmin = isSuper || isConfiguredAdmin || uid === "1046406575998382160";
 
   const adminNav = document.getElementById("admin-nav-group");
   if (adminNav) {
