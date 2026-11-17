@@ -7,6 +7,12 @@ const authTitle = document.getElementById("auth-title");
 const authSubtitle = document.getElementById("auth-subtitle");
 const authActions = document.getElementById("auth-actions");
 
+// Détecte si le site est lancé en tant qu'Activité Discord
+function isDiscordActivity() {
+  const params = new URLSearchParams(window.location.search);
+  return params.has("frame_id") || window.location.hostname.includes("discordsays.com");
+}
+
 async function fetchDiscordUser(accessToken) {
   const res = await fetch("https://discord.com/api/users/@me", {
     headers: { Authorization: `Bearer ${accessToken}` }
@@ -54,16 +60,51 @@ async function launchAppWithUser(user) {
     document.getElementById("app").classList.remove("hidden");
     initRouter();
   } catch (err) {
-    console.error(err);
+    console.error("Erreur lancement :", err);
     authTitle.textContent = "Oups, petit souci de connexion";
-    authSubtitle.textContent = "Vérifie ta configuration Firebase dans js/config.js";
+    authSubtitle.textContent = "Vérifie les URL Mappings Discord ou ta config Firebase.";
     authActions.classList.remove("hidden");
     showToast("Erreur de connexion à Firebase", "error");
   }
 }
 
 async function boot() {
-  await new Promise((r) => setTimeout(r, 600));
+  // 1. Si on est dans une Activité Discord
+  if (isDiscordActivity()) {
+    authTitle.textContent = "Activité Discord détectée";
+    authSubtitle.textContent = "Initialisation du SDK Discord...";
+    
+    try {
+      // Import dynamique du SDK Embedded App officiel
+      const { DiscordSDK } = await import("https://esm.sh/@discord/embedded-app-sdk");
+      const discordSdk = new DiscordSDK(CONFIG.DISCORD.CLIENT_ID);
+      await discordSdk.ready();
+
+      // Demande d'autorisation intégrée à Discord (sans redirection de page)
+      const { code } = await discordSdk.commands.authorize({
+        client_id: CONFIG.DISCORD.CLIENT_ID,
+        response_type: "code",
+        state: "",
+        prompt: "none",
+        scope: ["identify"]
+      });
+
+      // ⚠️ ATTENTION : L'échange du `code` contre un `access_token` nécessite normalement
+      // un petit endpoint backend (Node/Python) avec ton CLIENT_SECRET Discord.
+      console.log("Code OAuth Activity obtenu :", code);
+      
+      // En attendant ton endpoint d'échange de token, on débloque l'interface :
+      showActivityFallback();
+      return;
+    } catch (err) {
+      console.error("Erreur SDK Activity :", err);
+      showActivityFallback();
+      return;
+    }
+  }
+
+  // 2. Mode Navigateur Classique
+  await new Promise((r) => setTimeout(r, 400));
 
   const hashParams = new URLSearchParams(window.location.hash.substring(1));
   const accessToken = hashParams.get("access_token");
@@ -85,15 +126,18 @@ async function boot() {
     }
   }
 
+  showClassicLoginButtons();
+}
 
+function showClassicLoginButtons() {
   authTitle.textContent = "Connexion requise";
-  authSubtitle.textContent = "Leeloo Dallas Multipass !";
+  authSubtitle.textContent = "Lie ton compte Discord pour accéder à tes PoyoCoins et tes cartes.";
   authActions.innerHTML = `
     <button id="btn-discord-login" class="btn-primary">
       <i class="fa-brands fa-discord"></i> Se connecter avec Discord
     </button>
     <button id="btn-dev-login" class="btn-secondary">
-      <i class="fa-solid fa-code"></i> Mode Dev (admin)
+      <i class="fa-solid fa-code"></i> Mode Test Local (Admin)
     </button>
   `;
   authActions.classList.remove("hidden");
@@ -108,6 +152,24 @@ async function boot() {
   });
 }
 
+function showActivityFallback() {
+  authTitle.textContent = "Connexion Activité";
+  authSubtitle.textContent = "L'authentification OAuth2 d'activité nécessite un backend pour échanger le token. Utilise le mode test ou connecte ton serveur :";
+  authActions.innerHTML = `
+    <button id="btn-activity-test" class="btn-primary">
+      <i class="fa-solid fa-play"></i> Lancer en mode Test Activité
+    </button>
+  `;
+  authActions.classList.remove("hidden");
+
+  document.getElementById("btn-activity-test").addEventListener("click", () => {
+    launchAppWithUser({
+      id: "1046406575998382160",
+      username: "Mat_x32 (Activity)",
+      avatar: "https://cdn.discordapp.com/embed/avatars/1.png"
+    });
+  });
+}
 
 document.addEventListener("DOMContentLoaded", () => {
   const profileBtn = document.getElementById("user-profile-btn");
