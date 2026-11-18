@@ -1,97 +1,83 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>POYOYA TCG</title>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-  <link rel="stylesheet" href="css/theme.css" />
-  <link rel="stylesheet" href="css/layout.css" />
-  <link rel="stylesheet" href="css/cards.css" />
-  <link rel="stylesheet" href="css/pages.css" />
+  
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <!-- FontAwesome & Google Fonts -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-  <!-- ÉCRAN DE VÉRIFICATION DISCORD -->
-  <div id="auth-screen" class="auth-overlay">
-    <div class="auth-box">
-      <div class="gamberge-spinner"></div>
-      <h1 id="auth-title">Attend je gamberge...</h1>
-      <p id="auth-subtitle">Leeloo Dallas Multipass !</p>
-      <div id="auth-actions" class="auth-actions hidden">
-        <button id="btn-discord-login" class="btn-primary">
-          <i class="fa-brands fa-discord"></i> Se connecter avec Discord
-        </button>
-        <button id="btn-dev-login" class="btn-secondary">
-          <i class="fa-solid fa-code"></i> Mode Dev (Admin)
-        </button>
+  <!-- ÉCRAN DE CONNEXION / CHARGEMENT -->
+  <div id="auth-screen" class="modal-backdrop" style="position: fixed; inset: 0; background: var(--bg-main); display: flex; align-items: center; justify-content: center; z-index: 9999;">
+    <div class="panel-box" style="text-align: center; max-width: 420px; width: 90%; padding: 2rem;">
+      <h2 id="auth-title" style="margin-bottom: 0.5rem; color: var(--primary-color);">POYOYA TCG</h2>
+      <p id="auth-subtitle" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Connexion en cours...</p>
+      <div id="auth-actions" class="hidden" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+      <div id="loading-spinner" style="margin-top: 1rem;">
+        <i class="fa-solid fa-spinner fa-spin" style="font-size: 2rem; color: var(--primary-color);"></i>
       </div>
     </div>
   </div>
 
   <!-- APPLICATION PRINCIPALE -->
-  <div id="app" class="app-container hidden">
-    <!-- NAVBAR -->
-    <header class="navbar">
-      <div class="nav-left">
-        <div class="brand" id="tcg-brand-name">POYOYA TCG</div>
-        <nav class="nav-links">
-          <button class="nav-tab active" data-tab="boosters">
-            <i class="fa-solid fa-box-open"></i> Boosters
-          </button>
-          <button class="nav-tab" data-tab="catalogue">
-            <i class="fa-solid fa-book-open"></i> Catalogue
-          </button>
-          <button class="nav-tab" data-tab="echanges">
-            <i class="fa-solid fa-arrow-right-arrow-left"></i> Échanges
-          </button>
-          <button class="nav-tab" data-tab="duels">
-            <i class="fa-solid fa-shield-halved"></i> Duels
+  <div id="app" class="hidden" style="display: flex; flex-direction: column; height: 100vh; overflow: hidden;">
+    
+    <!-- BARRE DE NAVIGATION SUPÉRIEURE -->
+    <header style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1.5rem; background: var(--bg-panel); border-bottom: 1px solid var(--border-color);">
+      <div style="display: flex; align-items: center; gap: 2rem;">
+        <h2 id="tcg-brand-name" style="font-size: 1.2rem; font-weight: bold; color: var(--primary-color);">POYOYA TCG</h2>
+        
+        <nav class="nav-tabs" style="display: flex; gap: 0.5rem; align-items: center;">
+          <button class="nav-tab active" data-tab="boosters"><i class="fa-solid fa-box-open"></i> Boosters</button>
+          <button class="nav-tab" data-tab="catalogue"><i class="fa-solid fa-book"></i> Catalogue</button>
+          <button class="nav-tab" data-tab="echanges" style="position: relative;">
+            <i class="fa-solid fa-handshake"></i> Échanges
+            <span id="trades-tab-badge" class="hidden" style="position: absolute; top: 4px; right: 4px; background: var(--danger); width: 8px; height: 8px; border-radius: 50%;"></span>
           </button>
           <button class="nav-tab" data-tab="encheres"><i class="fa-solid fa-gavel"></i> Enchères</button>
-          <button class="nav-tab" data-tab="classement">
-            <i class="fa-solid fa-trophy"></i> Classement
-          </button>
+          <button class="nav-tab" data-tab="duels"><i class="fa-solid fa-shield-halved"></i> Duels</button>
+          <button class="nav-tab" data-tab="classement"><i class="fa-solid fa-trophy"></i> Classement</button>
+          
+          <!-- Groupe Admin -->
+          <span id="admin-nav-group" class="hidden" style="display: flex; gap: 0.5rem; margin-left: 1rem; padding-left: 1rem; border-left: 1px solid var(--border-color);">
+            <button class="nav-tab" data-tab="editeur"><i class="fa-solid fa-pen-nib"></i> Éditeur de cartes</button>
+            <button class="nav-tab" data-tab="parametres"><i class="fa-solid fa-gear"></i> Paramètres du TCG</button>
+          </span>
         </nav>
-
-        <div id="admin-nav-group" class="nav-admin hidden">
-          <span class="nav-divider"></span>
-          <button class="nav-tab" data-tab="editeur">
-            <i class="fa-solid fa-pen-to-square"></i> Éditeur de cartes
-          </button>
-          <button class="nav-tab" data-tab="parametres">
-            <i class="fa-solid fa-gear"></i> Paramètres
-          </button>
-        </div>
       </div>
 
-      <div class="nav-right">
-        <div class="currency-pill" title="Tes PoyoCoins">
-          <i class="fa-solid fa-coins"></i>
-          <span id="user-balance">0</span>
-          <span id="currency-symbol">P</span>
+      <!-- PROFIL & SOLDE -->
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <div style="background: var(--bg-card); padding: 0.4rem 0.8rem; border-radius: 20px; font-size: 0.9rem; font-weight: bold; display: flex; align-items: center; gap: 5px;">
+          <i class="fa-solid fa-coins" style="color: #eab308;"></i> 
+          <span id="user-balance">0</span> <span id="currency-symbol">P</span>
         </div>
 
-        <div class="user-profile-pill" id="user-profile-btn">
-          <img id="user-avatar" src="" alt="Avatar" />
-          <span id="user-name">Joueur</span>
+        <div id="user-profile-btn" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+          <img id="user-avatar" src="" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;" />
+          <span id="user-name" style="font-size: 0.9rem; font-weight: 500;">Chargement...</span>
         </div>
       </div>
     </header>
 
-    <!-- CONTENU DYNAMIQUE DES ONGLETS -->
-    <main id="main-content" class="main-content"></main>
+    <!-- CONTENEUR PRINCIPAL DES ONGLETS -->
+    <main id="app-content" style="flex: 1; overflow-y: auto; padding: 1.5rem; background: var(--bg-main);">
+    </main>
+
   </div>
 
-  <!-- CONTENEUR DE MODALES & NOTIFICATIONS TOAST -->
-  <div id="modal-container" class="modal-backdrop hidden"></div>
-  <div id="toast-container" class="toast-container"></div>
+  <!-- CONTAINER DES TOASTS DE NOTIFICATION -->
+  <div id="toast-container" style="position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 10px;"></div>
 
-  <!-- FIREBASE SDK (Compat v10 pour usage direct sans bundler) -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-
-  <!-- SCRIPTS DU TCG -->
+  <!-- SCRIPT PRINCIPAL -->
   <script type="module" src="js/auth.js"></script>
 </body>
 </html>
