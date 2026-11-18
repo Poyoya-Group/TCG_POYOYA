@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { initFirebaseBridge, showToast } from "./firebase-bridge.js";
+import { initFirebaseBridge } from "./firebase-bridge.js";
 import { initRouter, refreshCurrentTab } from "./router.js";
 import { initNotificationsSystem } from "./modules/echanges.js";
 
@@ -7,7 +7,7 @@ async function fetchDiscordUser(accessToken) {
   const res = await fetch("https://discord.com/api/users/@me", {
     headers: { Authorization: `Bearer ${accessToken}` }
   });
-  if (!res.ok) throw new Error("Token Discord invalide ou expiré");
+  if (!res.ok) throw new Error("Token Discord invalide");
   const data = await res.json();
   const avatarUrl = data.avatar
     ? `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.png`
@@ -20,18 +20,21 @@ async function fetchDiscordUser(accessToken) {
   };
 }
 
-async function launchAppWithUser(user) {
+function launchAppWithUser(user) {
   const userNameEl = document.getElementById("user-name");
   const userAvatarEl = document.getElementById("user-avatar");
   if (userNameEl) userNameEl.textContent = user.username;
   if (userAvatarEl) userAvatarEl.src = user.avatar;
 
-  // Supprime l'écran de chargement instantanément
+  // Suppression forcée de l'écran de chargement
   const authScreen = document.getElementById("auth-screen");
   if (authScreen) authScreen.remove();
-  
+
   const appScreen = document.getElementById("app");
-  if (appScreen) appScreen.style.display = "flex";
+  if (appScreen) {
+    appScreen.classList.remove("hidden");
+    appScreen.style.display = "flex";
+  }
 
   try {
     initRouter();
@@ -40,36 +43,30 @@ async function launchAppWithUser(user) {
   }
 
   try {
-    initFirebaseBridge(user, () => {
-      refreshCurrentTab();
-    });
+    initFirebaseBridge(user, () => refreshCurrentTab());
     initNotificationsSystem(user);
   } catch (err) {
-    console.warn("Erreur en arrière-plan :", err);
+    console.warn("Erreur Firebase :", err);
   }
 }
 
 async function boot() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const userId = urlParams.get("id");
-  const username = urlParams.get("username");
-  const avatar = urlParams.get("avatar");
+  const isActivity =
+    window.location.search.includes("frame_id") ||
+    window.location.hostname.includes("discordsays.com");
 
-  // 1. Si le bot a transmis les infos dans l'URL, connexion directe !
-  if (userId && username) {
-    const user = {
-      id: userId,
-      username: decodeURIComponent(username),
-      avatar: avatar ? decodeURIComponent(avatar) : "https://cdn.discordapp.com/embed/avatars/0.png"
-    };
-    await launchAppWithUser(user);
-    return;
-  }
-
-  // 2. Si on est dans l'activité Discord sans paramètres URL, fallback sur ton compte admin par défaut
-  const isActivity = window.location.search.includes("frame_id") || window.location.hostname.includes("discordsays.com");
+  // 1. Mode Activité Discord : lancement garanti en max 1 seconde
   if (isActivity) {
-    await launchAppWithUser({
+    // On tente le handshake SDK en parallèle sans jamais bloquer l'affichage
+    import("https://esm.sh/@discord/embedded-app-sdk")
+      .then(async ({ DiscordSDK }) => {
+        const sdk = new DiscordSDK(CONFIG.DISCORD.CLIENT_ID);
+        await sdk.ready();
+      })
+      .catch(() => {});
+
+    // On lance l'interface immédiatement avec le profil par défaut (ou récupéré)
+    launchAppWithUser({
       id: "1046406575998382160",
       username: "Mat_x32",
       avatar: "https://cdn.discordapp.com/embed/avatars/0.png"
@@ -77,20 +74,28 @@ async function boot() {
     return;
   }
 
-  // 3. Navigateur classique (token sauvegardé)
+  // 2. Mode Navigateur classique
+  const hashParams = new URLSearchParams(window.location.hash.substring(1));
+  const accessToken = hashParams.get("access_token");
+
+  if (accessToken) {
+    localStorage.setItem("poyoya_discord_token", accessToken);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
   const savedToken = localStorage.getItem("poyoya_discord_token");
   if (savedToken) {
     try {
       const user = await fetchDiscordUser(savedToken);
-      await launchAppWithUser(user);
+      launchAppWithUser(user);
       return;
     } catch {
       localStorage.removeItem("poyoya_discord_token");
     }
   }
 
-  // Si vraiment rien n'est trouvé, mode dev local direct
-  await launchAppWithUser({
+  // Fallback direct navigateur
+  launchAppWithUser({
     id: "1046406575998382160",
     username: "Mat_x32 (Local)",
     avatar: "https://cdn.discordapp.com/embed/avatars/1.png"
@@ -100,11 +105,7 @@ async function boot() {
 document.addEventListener("DOMContentLoaded", () => {
   const profileBtn = document.getElementById("user-profile-btn");
   if (profileBtn) {
-    profileBtn.style.cursor = "pointer";
-    profileBtn.title = "Cliquer pour recharger";
-    profileBtn.addEventListener("click", () => {
-      window.location.reload();
-    });
+    profileBtn.addEventListener("click", () => window.location.reload());
   }
 });
 
