@@ -40,10 +40,12 @@ async function launchAppWithUser(user) {
   if (userNameEl) userNameEl.textContent = user.username;
   if (userAvatarEl) userAvatarEl.src = user.avatar;
 
-  // Masquer l'écran de chargement et afficher l'application tout de suite
-  document.getElementById("auth-screen")?.classList.add("hidden");
-  document.getElementById("auth-screen")?.remove(); // Supprime l'élément pour être sûr qu'il ne bloque rien
-  document.getElementById("app")?.classList.remove("hidden");
+  // Masquer l'écran de chargement et afficher l'application immédiatement
+  const authScreen = document.getElementById("auth-screen");
+  if (authScreen) authScreen.remove();
+  
+  const appScreen = document.getElementById("app");
+  if (appScreen) appScreen.style.display = "flex";
 
   try {
     initRouter();
@@ -62,8 +64,20 @@ async function launchAppWithUser(user) {
 }
 
 async function boot() {
-  // Si on est dans l'Activité Discord, on connecte directement l'admin sans boucle
-  if (window.location.search.includes("frame_id") || window.location.hostname.includes("discordsays.com")) {
+  // 1. Gestion spécifique pour l'Activité Discord (SDK officiel intégré pour stopper le chargement infini)
+  const isActivity = window.location.search.includes("frame_id") || window.location.hostname.includes("discordsays.com");
+  
+  if (isActivity) {
+    try {
+      const { DiscordSDK } = await import("https://esm.sh/@discord/embedded-app-sdk");
+      const discordSdk = new DiscordSDK(CONFIG.DISCORD.CLIENT_ID);
+      await discordSdk.ready();
+      console.log("SDK Discord initialisé avec succès !");
+    } catch (e) {
+      console.warn("Mode d'activité détecté, initialisation du SDK contournée :", e);
+    }
+
+    // Lancement direct de l'application pour l'activité
     await launchAppWithUser({
       id: "1046406575998382160",
       username: "Mat_x32",
@@ -72,6 +86,7 @@ async function boot() {
     return;
   }
 
+  // 2. Navigateur classique
   const hashParams = new URLSearchParams(window.location.hash.substring(1));
   const accessToken = hashParams.get("access_token");
 
@@ -92,7 +107,6 @@ async function boot() {
     }
   }
 
-  // Affichage des options de connexion dans le navigateur normal
   if (spinner) spinner.style.display = "none";
   if (authTitle) authTitle.textContent = "Connexion requise";
   if (authSubtitle) authSubtitle.textContent = "Choisis ton mode de connexion pour accéder à POYOYA :";
