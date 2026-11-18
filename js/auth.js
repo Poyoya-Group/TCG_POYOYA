@@ -3,11 +3,6 @@ import { initFirebaseBridge, showToast } from "./firebase-bridge.js";
 import { initRouter, refreshCurrentTab } from "./router.js";
 import { initNotificationsSystem } from "./modules/echanges.js";
 
-const authTitle = document.getElementById("auth-title");
-const authSubtitle = document.getElementById("auth-subtitle");
-const authActions = document.getElementById("auth-actions");
-const spinner = document.getElementById("loading-spinner");
-
 async function fetchDiscordUser(accessToken) {
   const res = await fetch("https://discord.com/api/users/@me", {
     headers: { Authorization: `Bearer ${accessToken}` }
@@ -25,21 +20,13 @@ async function fetchDiscordUser(accessToken) {
   };
 }
 
-function startDiscordOAuth() {
-  const url = new URL("https://discord.com/api/oauth2/authorize");
-  url.searchParams.set("client_id", CONFIG.DISCORD.CLIENT_ID);
-  url.searchParams.set("redirect_uri", CONFIG.DISCORD.REDIRECT_URI);
-  url.searchParams.set("response_type", "token");
-  url.searchParams.set("scope", CONFIG.DISCORD.SCOPES);
-  window.location.href = url.toString();
-}
-
 async function launchAppWithUser(user) {
   const userNameEl = document.getElementById("user-name");
   const userAvatarEl = document.getElementById("user-avatar");
   if (userNameEl) userNameEl.textContent = user.username;
   if (userAvatarEl) userAvatarEl.src = user.avatar;
 
+  // Supprime l'écran de chargement instantanément
   const authScreen = document.getElementById("auth-screen");
   if (authScreen) authScreen.remove();
   
@@ -63,43 +50,35 @@ async function launchAppWithUser(user) {
 }
 
 async function boot() {
-  const isActivity = window.location.search.includes("frame_id") || window.location.hostname.includes("discordsays.com");
+  const urlParams = new URLSearchParams(window.location.search);
+  const userId = urlParams.get("id");
+  const username = urlParams.get("username");
+  const avatar = urlParams.get("avatar");
 
-  // Si on est dans l'activité Discord, on affiche un bouton propre "Entrer" pour valider l'entrée instantanément
-  if (isActivity) {
-    if (spinner) spinner.style.display = "none";
-    if (authTitle) authTitle.textContent = "POYOYA TCG - Activité";
-    if (authSubtitle) authSubtitle.textContent = "Appuie sur le bouton pour entrer dans l'arène :";
-    if (authActions) {
-      authActions.innerHTML = `
-        <button id="btn-activity-enter" class="btn-primary" style="padding: 0.75rem; border-radius: 8px; cursor: pointer; background: var(--primary-color); color: white; border: none; font-weight: bold;">
-          <i class="fa-solid fa-play"></i> Entrer dans le jeu
-        </button>
-      `;
-      authActions.classList.remove("hidden");
-
-      document.getElementById("btn-activity-enter").addEventListener("click", () => {
-        launchAppWithUser({
-          id: "1046406575998382160",
-          username: "Mat_x32",
-          avatar: "https://cdn.discordapp.com/embed/avatars/0.png"
-        });
-      });
-    }
+  // 1. Si le bot a transmis les infos dans l'URL, connexion directe !
+  if (userId && username) {
+    const user = {
+      id: userId,
+      username: decodeURIComponent(username),
+      avatar: avatar ? decodeURIComponent(avatar) : "https://cdn.discordapp.com/embed/avatars/0.png"
+    };
+    await launchAppWithUser(user);
     return;
   }
 
-  // Navigateur classique
-  const hashParams = new URLSearchParams(window.location.hash.substring(1));
-  const accessToken = hashParams.get("access_token");
-
-  if (accessToken) {
-    localStorage.setItem("poyoya_discord_token", accessToken);
-    window.history.replaceState({}, document.title, window.location.pathname);
+  // 2. Si on est dans l'activité Discord sans paramètres URL, fallback sur ton compte admin par défaut
+  const isActivity = window.location.search.includes("frame_id") || window.location.hostname.includes("discordsays.com");
+  if (isActivity) {
+    await launchAppWithUser({
+      id: "1046406575998382160",
+      username: "Mat_x32",
+      avatar: "https://cdn.discordapp.com/embed/avatars/0.png"
+    });
+    return;
   }
 
+  // 3. Navigateur classique (token sauvegardé)
   const savedToken = localStorage.getItem("poyoya_discord_token");
-
   if (savedToken) {
     try {
       const user = await fetchDiscordUser(savedToken);
@@ -110,38 +89,20 @@ async function boot() {
     }
   }
 
-  if (spinner) spinner.style.display = "none";
-  if (authTitle) authTitle.textContent = "Connexion requise";
-  if (authSubtitle) authSubtitle.textContent = "Choisis ton mode de connexion pour accéder à POYOYA :";
-  if (authActions) {
-    authActions.innerHTML = `
-      <button id="btn-discord-login" class="btn-primary" style="padding: 0.75rem; border-radius: 8px; cursor: pointer;">
-        <i class="fa-brands fa-discord"></i> Se connecter avec Discord
-      </button>
-      <button id="btn-dev-login" class="btn-secondary" style="padding: 0.75rem; border-radius: 8px; cursor: pointer;">
-        <i class="fa-solid fa-code"></i> Mode Test Local (Admin)
-      </button>
-    `;
-    authActions.classList.remove("hidden");
-
-    document.getElementById("btn-discord-login").addEventListener("click", startDiscordOAuth);
-    document.getElementById("btn-dev-login").addEventListener("click", () => {
-      launchAppWithUser({
-        id: "1046406575998382160",
-        username: "Mat_x32 (Local)",
-        avatar: "https://cdn.discordapp.com/embed/avatars/1.png"
-      });
-    });
-  }
+  // Si vraiment rien n'est trouvé, mode dev local direct
+  await launchAppWithUser({
+    id: "1046406575998382160",
+    username: "Mat_x32 (Local)",
+    avatar: "https://cdn.discordapp.com/embed/avatars/1.png"
+  });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
   const profileBtn = document.getElementById("user-profile-btn");
   if (profileBtn) {
     profileBtn.style.cursor = "pointer";
-    profileBtn.title = "Cliquer pour changer de compte";
+    profileBtn.title = "Cliquer pour recharger";
     profileBtn.addEventListener("click", () => {
-      localStorage.removeItem("poyoya_discord_token");
       window.location.reload();
     });
   }
