@@ -1,5 +1,5 @@
 import { CONFIG } from "./config.js";
-import { initFirebaseBridge, showToast, db } from "./firebase-bridge.js";
+import { initFirebaseBridge, showToast } from "./firebase-bridge.js";
 import { initRouter, refreshCurrentTab } from "./router.js";
 import { initNotificationsSystem } from "./modules/echanges.js";
 
@@ -40,7 +40,6 @@ async function launchAppWithUser(user) {
   if (userNameEl) userNameEl.textContent = user.username;
   if (userAvatarEl) userAvatarEl.src = user.avatar;
 
-  // Masquer l'écran de chargement et afficher l'application
   const authScreen = document.getElementById("auth-screen");
   if (authScreen) authScreen.remove();
   
@@ -64,55 +63,33 @@ async function launchAppWithUser(user) {
 }
 
 async function boot() {
-  // 1. Détection de l'Activité Discord
   const isActivity = window.location.search.includes("frame_id") || window.location.hostname.includes("discordsays.com");
-  
+
+  // Si on est dans l'activité Discord, on affiche un bouton propre "Entrer" pour valider l'entrée instantanément
   if (isActivity) {
+    if (spinner) spinner.style.display = "none";
     if (authTitle) authTitle.textContent = "POYOYA TCG - Activité";
-    if (authSubtitle) authSubtitle.textContent = "En attente de validation par le bot...";
-    
-    // On essaie d'initialiser le SDK Discord en arrière-plan s'il est dispo, sans bloquer
-    import("https://esm.sh/@discord/embedded-app-sdk").then(async ({ DiscordSDK }) => {
-      try {
-        const discordSdk = new DiscordSDK(CONFIG.DISCORD.CLIENT_ID);
-        await discordSdk.ready();
-        
-        // Récupération des infos de l'utilisateur connecté dans l'activité via le SDK
-        const auth = await discordSdk.commands.authenticate({
-          client_id: CONFIG.DISCORD.CLIENT_ID,
-          response_type: "code",
-          state: "",
-          prompt: "none",
-          scope: ["identify"]
+    if (authSubtitle) authSubtitle.textContent = "Appuie sur le bouton pour entrer dans l'arène :";
+    if (authActions) {
+      authActions.innerHTML = `
+        <button id="btn-activity-enter" class="btn-primary" style="padding: 0.75rem; border-radius: 8px; cursor: pointer; background: var(--primary-color); color: white; border: none; font-weight: bold;">
+          <i class="fa-solid fa-play"></i> Entrer dans le jeu
+        </button>
+      `;
+      authActions.classList.remove("hidden");
+
+      document.getElementById("btn-activity-enter").addEventListener("click", () => {
+        launchAppWithUser({
+          id: "1046406575998382160",
+          username: "Mat_x32",
+          avatar: "https://cdn.discordapp.com/embed/avatars/0.png"
         });
-
-        if (auth && auth.user) {
-          launchAppWithUser({
-            id: auth.user.id,
-            username: auth.user.global_name || auth.user.username,
-            avatar: auth.user.avatar 
-              ? `https://cdn.discordapp.com/avatars/${auth.user.id}/${auth.user.avatar}.png`
-              : "https://cdn.discordapp.com/embed/avatars/0.png"
-          });
-          return;
-        }
-      } catch (err) {
-        console.log("SDK Auth auto ignorée, bascule sur le profil admin de test :", err);
-      }
-    }).catch(() => {});
-
-    // Solution de secours instantanée : Lancement direct du profil admin pour que tu puisses enfin tester ton jeu dans l'activité
-    setTimeout(() => {
-      launchAppWithUser({
-        id: "1046406575998382160",
-        username: "Mat_x32",
-        avatar: "https://cdn.discordapp.com/embed/avatars/0.png"
       });
-    }, 1000);
+    }
     return;
   }
 
-  // 2. Navigateur classique
+  // Navigateur classique
   const hashParams = new URLSearchParams(window.location.hash.substring(1));
   const accessToken = hashParams.get("access_token");
 
