@@ -6,6 +6,7 @@ import { initNotificationsSystem } from "./modules/echanges.js";
 const authTitle = document.getElementById("auth-title");
 const authSubtitle = document.getElementById("auth-subtitle");
 const authActions = document.getElementById("auth-actions");
+const spinner = document.getElementById("loading-spinner");
 
 async function fetchDiscordUser(accessToken) {
   const res = await fetch("https://discord.com/api/users/@me", {
@@ -39,8 +40,9 @@ async function launchAppWithUser(user) {
   if (userNameEl) userNameEl.textContent = user.username;
   if (userAvatarEl) userAvatarEl.src = user.avatar;
 
-  // Masquer l'écran de connexion et afficher l'application tout de suite
+  // Masquer l'écran de chargement et afficher l'application tout de suite
   document.getElementById("auth-screen")?.classList.add("hidden");
+  document.getElementById("auth-screen")?.remove(); // Supprime l'élément pour être sûr qu'il ne bloque rien
   document.getElementById("app")?.classList.remove("hidden");
 
   try {
@@ -49,7 +51,6 @@ async function launchAppWithUser(user) {
     console.error("Erreur router :", err);
   }
 
-  // Lancer Firebase et les notifications en arrière-plan
   try {
     initFirebaseBridge(user, () => {
       refreshCurrentTab();
@@ -61,6 +62,16 @@ async function launchAppWithUser(user) {
 }
 
 async function boot() {
+  // Si on est dans l'Activité Discord, on connecte directement l'admin sans boucle
+  if (window.location.search.includes("frame_id") || window.location.hostname.includes("discordsays.com")) {
+    await launchAppWithUser({
+      id: "1046406575998382160",
+      username: "Mat_x32",
+      avatar: "https://cdn.discordapp.com/embed/avatars/0.png"
+    });
+    return;
+  }
+
   const hashParams = new URLSearchParams(window.location.hash.substring(1));
   const accessToken = hashParams.get("access_token");
 
@@ -81,25 +92,16 @@ async function boot() {
     }
   }
 
-  // Si on est dans l'activité Discord (détecté par le paramètre frame_id), on connecte direct l'admin sans bloquer
-  if (window.location.search.includes("frame_id") || window.location.hostname.includes("discordsays.com")) {
-    await launchAppWithUser({
-      id: "1046406575998382160",
-      username: "Mat_x32",
-      avatar: "https://cdn.discordapp.com/embed/avatars/0.png"
-    });
-    return;
-  }
-
-  // Sinon, affichage normal des boutons de connexion dans le navigateur
+  // Affichage des options de connexion dans le navigateur normal
+  if (spinner) spinner.style.display = "none";
   if (authTitle) authTitle.textContent = "Connexion requise";
   if (authSubtitle) authSubtitle.textContent = "Choisis ton mode de connexion pour accéder à POYOYA :";
   if (authActions) {
     authActions.innerHTML = `
-      <button id="btn-discord-login" class="btn-primary">
+      <button id="btn-discord-login" class="btn-primary" style="padding: 0.75rem; border-radius: 8px; cursor: pointer;">
         <i class="fa-brands fa-discord"></i> Se connecter avec Discord
       </button>
-      <button id="btn-dev-login" class="btn-secondary">
+      <button id="btn-dev-login" class="btn-secondary" style="padding: 0.75rem; border-radius: 8px; cursor: pointer;">
         <i class="fa-solid fa-code"></i> Mode Test Local (Admin)
       </button>
     `;
