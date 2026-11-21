@@ -1,5 +1,5 @@
 export const CONFIG = {
-  // Identifiants de ton projet Firebase POYOYA
+  // ⚠️ Garde tes VRAIES valeurs ici (apiKey, messagingSenderId, appId...)
   FIREBASE: {
     apiKey: "AIzaSy...",
     authDomain: "poyochat.firebaseapp.com",
@@ -10,17 +10,16 @@ export const CONFIG = {
     appId: "..."
   },
 
-  // Application Discord (Developer Portal > OAuth2)
+  // Application Discord (Developer Portal)
+  // Plus de REDIRECT_URI : une Activité n'en a pas besoin.
   DISCORD: {
     CLIENT_ID: "1428020477699424357",
-    REDIRECT_URI: "https://literate-space-barnacle-jr9vqr9jwx6jcpp6p-5500.app.github.dev",
-    SCOPES: "identify"
+    SCOPES: ["identify"] // tableau, requis par le SDK
   },
 
-  // Mets ton vrai ID Discord ici pour être admin direct
+  // IDs Discord des admins du TCG
   SUPER_ADMINS: [
-    "1046406575998382160", // <--- TON VRAI ID DISCORD ICI
-    "DEV_ADMIN_LOCAL"
+    "1046406575998382160" // Mat_x32
   ],
 
   DB_ROOT: "poyoya_tcg"
