@@ -1,4 +1,9 @@
+import firebase from "firebase/compat/app";
+import "firebase/compat/database";
 import { CONFIG } from "./config.js";
+
+// Garde le global `firebase` pour tes modules (ex: firebase.database.ServerValue.TIMESTAMP)
+window.firebase = firebase;
 
 if (!firebase.apps.length) {
   firebase.initializeApp(CONFIG.FIREBASE);
@@ -38,17 +43,19 @@ export const DEFAULT_SETTINGS = {
 };
 
 export const AppState = {
+  // L'identité réelle est injectée par initFirebaseBridge() depuis Discord.
   user: {
-    id: "1046406575998382160",
-    username: "Mat_x32",
-    avatar: "https://cdn.discordapp.com/embed/avatars/0.png",
+    id: "",
+    username: "Invité",
+    avatar: "",
     poyocoins: 500,
     boostersStock: 5,
     collection: {},
     deck: [],
     stats: { boostersOpened: 0, duelsWon: 0 }
   },
-  isAdmin: true,
+  isAdmin: false, // calculé par checkAdminPermissions()
+  online: false,
   settings: structuredClone(DEFAULT_SETTINGS),
   seasons: {},
   cards: {},
@@ -79,9 +86,32 @@ export function applyDynamicTheme(identity) {
 }
 
 export function initFirebaseBridge(discordUser, onStateUpdated) {
-  if (discordUser) {
-    AppState.user = { ...AppState.user, ...discordUser };
+  if (!discordUser || !discordUser.id) {
+    throw new Error("Utilisateur Discord manquant : impossible d'initialiser Firebase.");
   }
+
+  // Identité "fraîche" venant de Discord (pseudo/avatar peuvent changer)
+  const identity = {
+    id: discordUser.id,
+    username: discordUser.username,
+    avatar: discordUser.avatar
+  };
+  AppState.user = { ...AppState.user, ...identity };
+
+  const notify = (what) => {
+    if (typeof onStateUpdated === "function") onStateUpdated(what);
+  };
+  const onError = (err) => console.error("Firebase :", err && err.message ? err.message : err);
+
+  // --- Diagnostic de connexion (utile pour déboguer le proxy Discord) ---
+  db.ref(".info/connected").on("value", (snap) => {
+    AppState.online = snap.val() === true;
+  });
+  setTimeout(() => {
+    if (!AppState.online) {
+      showToast("Connexion à la base Firebase impossible (vérifie le mapping /firebase).", "error");
+    }
+  }, 8000);
 
   const rootRef = db.ref(CONFIG.DB_ROOT);
 
@@ -95,60 +125,69 @@ export function initFirebaseBridge(discordUser, onStateUpdated) {
         maxCards: 100
       });
     }
-  }).catch(() => {});
+  }).catch(onError);
 
-  const userRef = rootRef.child(`users/${AppState.user.id}`);
+  const userRef = rootRef.child(`users/${identity.id}`);
   userRef.once("value").then((userSnap) => {
     if (!userSnap.exists()) {
       userRef.set(AppState.user);
+    } else {
+      userRef.update({ username: identity.username, avatar: identity.avatar });
     }
-  }).catch(() => {});
+  }).catch(onError);
 
   rootRef.child("settings").on("value", (snap) => {
     if (snap.exists()) {
       AppState.settings = { ...DEFAULT_SETTINGS, ...snap.val() };
       applyDynamicTheme(AppState.settings.identity);
       checkAdminPermissions();
-      if (typeof onStateUpdated === "function") onStateUpdated("settings");
+      notify("settings");
     }
-  });
+  }, onError);
 
   rootRef.child("seasons").on("value", (snap) => {
     AppState.seasons = snap.val() || {};
-    if (typeof onStateUpdated === "function") onStateUpdated("seasons");
-  });
+    notify("seasons");
+  }, onError);
 
   rootRef.child("cards").on("value", (snap) => {
     AppState.cards = snap.val() || {};
-    if (typeof onStateUpdated === "function") onStateUpdated("cards");
-  });
+    notify("cards");
+  }, onError);
 
   rootRef.child("encheres").on("value", (snap) => {
     AppState.encheres = snap.val() || {};
-    if (typeof onStateUpdated === "function") onStateUpdated("encheres");
-  });
+    notify("encheres");
+  }, onError);
 
   userRef.on("value", (snap) => {
     if (snap.exists()) {
-      AppState.user = snap.val();
+      // On garde les données du jeu, mais on impose l'identité Discord actuelle
+      AppState.user = { ...snap.val(), ...identity };
       const balEl = document.getElementById("user-balance");
       if (balEl) balEl.textContent = (AppState.user.poyocoins ?? 0).toLocaleString("fr-FR");
       checkAdminPermissions();
-      if (typeof onStateUpdated === "function") onStateUpdated("user");
+      notify("user");
     }
-  });
+  }, onError);
+
+  // Calcul immédiat des droits (sans attendre Firebase)
+  checkAdminPermissions();
 }
 
 function checkAdminPermissions() {
-  if (!AppState.user) return;
+  if (!AppState.user || !AppState.user.id) return;
   const uid = AppState.user.id;
+
   const isSuper = CONFIG.SUPER_ADMINS.includes(uid);
   const isConfiguredAdmin = Boolean(AppState.settings.admins && AppState.settings.admins[uid]);
-  
-  AppState.isAdmin = isSuper || isConfiguredAdmin || uid === "1046406575998382160";
+  const isDevAdmin = import.meta.env.DEV && uid === "DEV_LOCAL";
+
+  AppState.isAdmin = isSuper || isConfiguredAdmin || isDevAdmin;
 
   const adminNav = document.getElementById("admin-nav-group");
   if (adminNav) {
     adminNav.classList.toggle("hidden", !AppState.isAdmin);
+    adminNav.style.display = AppState.isAdmin ? "flex" : "none";
   }
 }
